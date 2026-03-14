@@ -1,18 +1,18 @@
-# ezphp/events
+# ez-php/events
 
-Event dispatcher module for the [ez-php framework](https://github.com/ezphp/framework) — lightweight publish/subscribe event system.
+Event dispatcher module for the [ez-php framework](https://github.com/ez-php/framework) — lightweight publish/subscribe event system.
 
-[![CI](https://github.com/ezphp/events/actions/workflows/ci.yml/badge.svg)](https://github.com/ezphp/events/actions/workflows/ci.yml)
+[![CI](https://github.com/ez-php/events/actions/workflows/ci.yml/badge.svg)](https://github.com/ez-php/events/actions/workflows/ci.yml)
 
 ## Requirements
 
 - PHP 8.5+
-- ezphp/framework ^1.0
+- ez-php/framework ^1.0
 
 ## Installation
 
 ```bash
-composer require ezphp/events
+composer require ez-php/events
 ```
 
 ## Setup

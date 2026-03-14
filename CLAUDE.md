@@ -86,7 +86,7 @@ When creating a new module or `CLAUDE.md` anywhere in this repository:
 
 **CLAUDE.md structure:**
 - Start with the full content of `CODING_GUIDELINES.md`, verbatim
-- Then add `---` followed by `# Package: ezphp/<name>` (or `# Directory: <name>`)
+- Then add `---` followed by `# Package: ez-php/<name>` (or `# Directory: <name>`)
 - Module-specific section must cover:
   - Source structure (file tree with one-line descriptions per file)
   - Key classes and their responsibilities
@@ -100,7 +100,7 @@ When creating a new module or `CLAUDE.md` anywhere in this repository:
 **Docker setup:** copy `docker-compose.yml`, `docker/`, `.env.example` and `start.sh` from the repository root and adapt them for the module (service names, ports, required services). Use a unique `DB_PORT` in `.env.example` that is not used by any other package — increment by one per package starting with `3306` (root).
 ---
 
-# Package: ezphp/events
+# Package: ez-php/events
 
 Synchronous event bus — dispatch, listen, and forget events within a single request.
 
@@ -204,7 +204,7 @@ Application listeners must be registered in the `boot()` method of a dedicated a
 
 ## Design Decisions and Constraints
 
-- **Synchronous only** — All listeners execute in the same PHP process before `dispatch()` returns. Async/queued events are out of scope; use `ezphp/queue` for deferred work.
+- **Synchronous only** — All listeners execute in the same PHP process before `dispatch()` returns. Async/queued events are out of scope; use `ez-php/queue` for deferred work.
 - **No event stopping / propagation control** — Listeners cannot stop further listeners from running. If this is needed, use a different pattern (e.g. a `Throwable`, a shared mutable context object, or a dedicated return-value convention).
 - **Listeners accumulate on repeated `listen()` calls** — There is no deduplication. Registering the same listener twice means it fires twice. This is intentional; deduplication is the caller's responsibility.
 - **`EventServiceProvider` resolves eagerly in `boot()`** — This is a deliberate exception to lazy resolution. The static façade must be wired before other providers' `boot()` methods run, otherwise `Event::listen()` calls in those providers would silently create a throwaway dispatcher that gets replaced when the container later resolves `EventDispatcher::class`.
@@ -227,9 +227,9 @@ Application listeners must be registered in the `boot()` method of a dedicated a
 
 | Concern | Where it belongs |
 |---|---|
-| Async / queued event dispatch | `ezphp/queue` |
+| Async / queued event dispatch | `ez-php/queue` |
 | Event sourcing / event store | Separate dedicated package |
 | Application event classes (e.g. `UserCreated`) | Application code |
 | Listener wiring for the application | Application-level service provider (`boot()`) |
 | Broadcast / WebSocket events | Infrastructure layer |
-| Observer pattern on Eloquent-style models | `ezphp/orm` |
+| Observer pattern on Eloquent-style models | `ez-php/orm` |

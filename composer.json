@@ -9,11 +9,11 @@
       "email": "andreas.uretschnig@gmail.com"
     }
   ],
-  "keywords": ["events", "event-dispatcher", "pub-sub", "php", "framework", "ezphp"],
-  "homepage": "https://github.com/ezphp/events",
+  "keywords": ["events", "event-dispatcher", "pub-sub", "php", "framework", "ez-php"],
+  "homepage": "https://github.com/ez-php/events",
   "support": {
-    "issues": "https://github.com/ezphp/events/issues",
-    "source": "https://github.com/ezphp/events"
+    "issues": "https://github.com/ez-php/events/issues",
+    "source": "https://github.com/ez-php/events"
   },
   "require": {
     "php": "^8.5",
