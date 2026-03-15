@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace EzPhp\Events;
 
-use EzPhp\Application\Application;
-use EzPhp\ServiceProvider\ServiceProvider;
+use EzPhp\Contracts\ContainerInterface;
+use EzPhp\Contracts\ServiceProvider;
 
 /**
  * Class EventServiceProvider
@@ -32,7 +32,7 @@ final class EventServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(EventDispatcher::class, function (Application $app): EventDispatcher {
+        $this->app->bind(EventDispatcher::class, function (ContainerInterface $app): EventDispatcher {
             $dispatcher = new EventDispatcher();
             Event::setDispatcher($dispatcher);
 
