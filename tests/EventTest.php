@@ -211,4 +211,48 @@ final class EventTest extends TestCase
 
         $this->assertSame(3, $counter->count);
     }
+
+    // ─── Wildcard via facade ──────────────────────────────────────────────────
+
+    /**
+     * Event::listen() with wildcard pattern delegates to dispatcher.
+     *
+     * @return void
+     */
+    public function test_listen_with_wildcard_pattern_delegates_to_dispatcher(): void
+    {
+        $event = $this->makeEvent();
+        $called = false;
+
+        Event::listen('*', function (EventInterface $e) use (&$called): void {
+            $called = true;
+        });
+
+        Event::dispatch($event);
+
+        $this->assertTrue($called);
+    }
+
+    // ─── Async via facade ─────────────────────────────────────────────────────
+
+    /**
+     * Event::dispatch() with async: true delegates to dispatcher.
+     * Without a queue set, it falls back to sync.
+     *
+     * @return void
+     */
+    public function test_dispatch_async_delegates_to_dispatcher(): void
+    {
+        $event = $this->makeEvent();
+        $called = false;
+
+        Event::listen($event::class, function (EventInterface $e) use (&$called): void {
+            $called = true;
+        });
+
+        // No queue set — falls back to sync.
+        Event::dispatch($event, async: true);
+
+        $this->assertTrue($called);
+    }
 }

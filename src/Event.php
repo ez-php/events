@@ -15,10 +15,15 @@ use Closure;
  *
  *   Event::listen(UserCreated::class, new SendWelcomeEmail());
  *   Event::listen(UserCreated::class, function (UserCreated $event): void { ... });
+ *   Event::listen('App\Events\Order*', $listener, priority: 10);
  *
- * Events are dispatched synchronously:
+ * Events are dispatched synchronously by default:
  *
  *   Event::dispatch(new UserCreated($userId));
+ *
+ * Async dispatch pushes the event onto a queue (requires a QueueInterface set on the dispatcher):
+ *
+ *   Event::dispatch(new UserCreated($userId), async: true);
  *
  * @package EzPhp\Events
  */
@@ -61,28 +66,38 @@ final class Event
     // ─── Static facade ────────────────────────────────────────────────────────
 
     /**
-     * Register a listener for the given event class.
+     * Register a listener for the given event class or wildcard pattern.
      *
-     * @param class-string<EventInterface>                    $eventClass
-     * @param ListenerInterface|Closure(EventInterface): void $listener
+     * @param string                                                 $eventClass Exact class-string or glob pattern
+     * @param ListenerInterface|Closure(EventInterface): (bool|void) $listener
+     * @param int                                                    $priority   Higher value = fires earlier (default 0)
+     *
+     * @return void
      */
-    public static function listen(string $eventClass, ListenerInterface|Closure $listener): void
+    public static function listen(string $eventClass, ListenerInterface|Closure $listener, int $priority = 0): void
     {
-        self::getDispatcher()->listen($eventClass, $listener);
+        self::getDispatcher()->listen($eventClass, $listener, $priority);
     }
 
     /**
      * Dispatch an event to all registered listeners.
+     *
+     * @param EventInterface $event
+     * @param bool           $async Push to queue instead of dispatching synchronously.
+     *
+     * @return void
      */
-    public static function dispatch(EventInterface $event): void
+    public static function dispatch(EventInterface $event, bool $async = false): void
     {
-        self::getDispatcher()->dispatch($event);
+        self::getDispatcher()->dispatch($event, $async);
     }
 
     /**
-     * Remove all listeners for the given event class.
+     * Remove all listeners for the given event class or pattern.
      *
-     * @param class-string<EventInterface> $eventClass
+     * @param string $eventClass Exact class-string or glob pattern to remove.
+     *
+     * @return void
      */
     public static function forget(string $eventClass): void
     {
