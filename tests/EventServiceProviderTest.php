@@ -45,6 +45,7 @@ final class EventServiceProviderTest extends ApplicationTestCase
 
     /**
      * @return void
+     * @throws \ReflectionException
      */
     public function test_event_dispatcher_is_bound_in_container(): void
     {
@@ -53,6 +54,7 @@ final class EventServiceProviderTest extends ApplicationTestCase
 
     /**
      * @return void
+     * @throws \ReflectionException
      */
     public function test_static_facade_is_wired_after_bootstrap(): void
     {
@@ -88,6 +90,7 @@ final class EventServiceProviderTest extends ApplicationTestCase
 
     /**
      * @return void
+     * @throws \ReflectionException
      */
     public function test_same_dispatcher_instance_used_by_facade_and_container(): void
     {
