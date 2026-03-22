@@ -17,8 +17,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use EzPhp\Events\Event;
 use EzPhp\Events\EventDispatcher;
+use EzPhp\Events\EventInterface;
 use EzPhp\Events\ListenerInterface;
 
 const ITERATIONS = 5000;
@@ -26,7 +26,7 @@ const THRESHOLD_MS = 1.0; // per-dispatch upper bound in milliseconds
 
 // ── Sample event and listeners ───────────────────────────────────────────────
 
-final class UserRegistered extends Event
+final class UserRegistered implements EventInterface
 {
     public function __construct(public readonly string $email)
     {
