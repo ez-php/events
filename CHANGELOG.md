@@ -6,6 +6,7 @@ All notable changes to `ez-php/events` are documented here.
 
 ### Documentation
 - Update CHANGELOG for v0.9.3 [skip ci] (5bc99fd)
+- Update CHANGELOG for v1.0.0 [skip ci] (2274d04)
 
 
 ## [v0.9.3] — 2026-03-24
