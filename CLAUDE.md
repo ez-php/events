@@ -168,7 +168,7 @@ src/
 ├── ListenerInterface.php   — Contract for class-based listeners: handle(EventInterface): void
 ├── EventDispatcher.php     — Synchronous bus; stores listeners by event class-string, dispatches in order
 ├── Event.php               — Static façade backed by a managed EventDispatcher singleton
-└── EventServiceProvider.php — Binds EventDispatcher, wires static façade, eager-resolves in boot()
+└── EventServiceProvider.php — Binds EventDispatcher, wires static façade, auto-registers config/events.php listeners in boot()
 
 tests/
 ├── TestCase.php                    — Base PHPUnit test case
@@ -250,9 +250,26 @@ Static façade. Delegates all calls to the managed `EventDispatcher` singleton.
 ### EventServiceProvider (`src/EventServiceProvider.php`)
 
 - **`register()`** — Binds `EventDispatcher::class` as a factory; calls `Event::setDispatcher()` when resolved.
-- **`boot()`** — Eagerly calls `$this->app->make(EventDispatcher::class)` to ensure the static façade is wired **before** any other provider's `boot()` calls `Event::listen()`. Without this, listener registration in other providers would silently target an unwired façade.
+- **`boot()`** — Eagerly resolves `EventDispatcher` (wiring the static façade), then reads `config/events.php` and registers all declared listeners via the container. Non-existent class names and entries that don't implement `ListenerInterface` are silently skipped.
 
-Application listeners must be registered in the `boot()` method of a dedicated application-level service provider that runs after `EventServiceProvider`.
+Config format (`config/events.php`):
+
+```php
+return [
+    'listeners' => [
+        UserCreated::class => [
+            SendWelcomeEmail::class,
+            LogUserCreation::class,
+        ],
+    ],
+];
+```
+
+Additional listeners can still be registered imperatively in any service provider that boots after `EventServiceProvider`:
+
+```php
+Event::listen(OrderPlaced::class, new SendOrderConfirmation());
+```
 
 ---
 
@@ -284,6 +301,6 @@ Application listeners must be registered in the `boot()` method of a dedicated a
 | Async / queued event dispatch | `ez-php/queue` |
 | Event sourcing / event store | Separate dedicated package |
 | Application event classes (e.g. `UserCreated`) | Application code |
-| Listener wiring for the application | Application-level service provider (`boot()`) |
+| Listener wiring for the application | `config/events.php` or an application-level service provider |
 | Broadcast / WebSocket events | Infrastructure layer |
 | Observer pattern on Eloquent-style models | `ez-php/orm` |
