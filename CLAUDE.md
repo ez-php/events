@@ -164,16 +164,18 @@ Synchronous event bus — dispatch, listen, and forget events within a single re
 
 ```
 src/
-├── EventInterface.php      — Marker interface; all dispatchable events must implement it
-├── ListenerInterface.php   — Contract for class-based listeners: handle(EventInterface): void
-├── EventDispatcher.php     — Synchronous bus; stores listeners by event class-string, dispatches in order
-├── Event.php               — Static façade backed by a managed EventDispatcher singleton
-└── EventServiceProvider.php — Binds EventDispatcher, wires static façade, auto-registers config/events.php listeners in boot()
+├── EventInterface.php          — Marker interface; all dispatchable events must implement it
+├── StoppableEventInterface.php — Extends EventInterface; events can stop propagation via isPropagationStopped()/stopPropagation()
+├── ListenerInterface.php       — Contract for class-based listeners: handle(EventInterface): void
+├── EventDispatcher.php         — Synchronous bus with priority, wildcard fnmatch patterns, propagation control, and async queue support
+├── AsyncEventJob.php           — JobInterface wrapper that re-dispatches an event synchronously when the queue worker runs it
+├── Event.php                   — Static façade backed by a managed EventDispatcher singleton
+└── EventServiceProvider.php    — Binds EventDispatcher, wires static façade, auto-registers config/events.php listeners in boot()
 
 tests/
 ├── TestCase.php                    — Base PHPUnit test case
 ├── EventTest.php                   — Covers Event façade: listen, dispatch, forget, instance management
-├── EventDispatcherTest.php         — Covers EventDispatcher: listen, dispatch, forget, getListeners, closure listeners
+├── EventDispatcherTest.php         — Covers EventDispatcher: listen, dispatch, forget, getListeners, closure listeners, priority, wildcard, propagation
 └── EventServiceProviderTest.php    — Covers provider registration and eager resolution
 ```
 
@@ -213,20 +215,27 @@ class SendWelcomeEmail implements ListenerInterface
 
 ### EventDispatcher (`src/EventDispatcher.php`)
 
-The core bus. Holds `array<class-string<EventInterface>, list<ListenerInterface|Closure>>`.
+The core bus. Holds `array<string, list<array{priority: int, listener: ...}>>` keyed by event class-string or glob pattern.
 
 | Method | Behaviour |
 |---|---|
-| `listen(class-string, ListenerInterface\|Closure)` | Appends listener to the list for that event class; duplicate registrations accumulate |
-| `dispatch(EventInterface)` | Calls all listeners for `$event::class` in registration order; no-op if none registered |
-| `forget(class-string)` | Removes all listeners for that event class |
-| `getListeners(class-string)` | Returns the listener list (empty array if none); used in tests |
+| `listen(string, ListenerInterface\|Closure, int $priority = 0)` | Appends listener; re-sorts the list by priority descending; duplicate registrations accumulate |
+| `dispatch(EventInterface, bool $async = false)` | When `$async` and a queue is set, pushes `AsyncEventJob`; otherwise invokes all matching listeners in priority order |
+| `forget(string)` | Removes all listeners registered under that key (exact or pattern) |
+| `getListeners(string)` | Returns the merged + sorted listener list for the given event class; used in tests |
+| `setQueue(QueueInterface)` | Wires a queue driver for async dispatch |
 
-Dispatch is **synchronous and in-process**. Listeners run before `dispatch()` returns. Exceptions thrown by a listener propagate to the caller.
+**Priority** — higher integer = fires first. Listeners with equal priority fire in registration order.
+
+**Wildcard patterns** — keys containing `*` or `?` match via `fnmatch()`. The bare `*` pattern matches any event. Anonymous classes (which contain null bytes in their generated name) are matched only against the `*` pattern.
+
+**Propagation control** — dispatch stops early if: (a) a Closure listener returns `false`, or (b) the event implements `StoppableEventInterface` and `isPropagationStopped()` returns `true` after a listener call.
+
+**Async dispatch** — when `$async = true` and a `QueueInterface` is set, the event is wrapped in `AsyncEventJob` and pushed onto the queue. `AsyncEventJob::handle()` re-dispatches synchronously (never passes `async: true`), preventing infinite recursion.
 
 Listener types:
 - `ListenerInterface` — calls `$listener->handle($event)`
-- `Closure` — calls `$listener($event)` directly
+- `Closure` — calls `$listener($event)` directly; returning `false` stops propagation
 
 ---
 
@@ -275,8 +284,8 @@ Event::listen(OrderPlaced::class, new SendOrderConfirmation());
 
 ## Design Decisions and Constraints
 
-- **Synchronous only** — All listeners execute in the same PHP process before `dispatch()` returns. Async/queued events are out of scope; use `ez-php/queue` for deferred work.
-- **No event stopping / propagation control** — Listeners cannot stop further listeners from running. If this is needed, use a different pattern (e.g. a `Throwable`, a shared mutable context object, or a dedicated return-value convention).
+- **Synchronous by default** — All listeners execute in the same PHP process before `dispatch()` returns. Async dispatch is opt-in via `dispatch($event, async: true)` and requires a `QueueInterface` to be configured on the dispatcher.
+- **Propagation control via `StoppableEventInterface` or Closure return value** — Events that implement `StoppableEventInterface` can call `stopPropagation()` from within a listener. Closures can stop propagation by returning `false`. Class-based `ListenerInterface` listeners cannot stop propagation — they must either modify event state (for stoppable events) or use a different pattern.
 - **Listeners accumulate on repeated `listen()` calls** — There is no deduplication. Registering the same listener twice means it fires twice. This is intentional; deduplication is the caller's responsibility.
 - **`EventServiceProvider` resolves eagerly in `boot()`** — This is a deliberate exception to lazy resolution. The static façade must be wired before other providers' `boot()` methods run, otherwise `Event::listen()` calls in those providers would silently create a throwaway dispatcher that gets replaced when the container later resolves `EventDispatcher::class`.
 - **`EventInterface` is a marker** — It carries no methods. Payload is carried by concrete event class properties (preferably `public readonly`). A heavier base class would force all events to extend it, breaking composition.
