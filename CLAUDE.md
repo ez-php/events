@@ -148,9 +148,11 @@ php make_module.php <name> --description="..." --services=mysql,redis
 ```
 
 `<name>` is the kebab-case package name; the namespace is derived as
-`EzPhp\<PascalCase>` unless `--namespace=` overrides it (`bignum` → `BigNum`,
-`opcache` → `OPCache`, and `dotenv` → `Env` are existing exceptions the guess
-gets wrong; `websocket-client` → `WebsocketClient`, `websocket-tls` → `WebsocketTls`,
+`EzPhp\<PascalCase>` (each `-`-separated word upper-cased) unless `--namespace=`
+overrides it. Existing exceptions the guess gets wrong: `bignum` → `BigNum`,
+`dataloader` → `DataLoader`, `dotenv` → `Env`, `graphql` → `GraphQL`, `oauth` → `OAuth`,
+`opcache` → `OPCache`, `swagger-ui` → `SwaggerUI`, `webauthn` → `WebAuthn` and
+`websocket` → `WebSocket`; `websocket-client` → `WebsocketClient`, `websocket-tls` → `WebsocketTls`,
 `webauthn-metadata` → `WebauthnMetadata` and `metrics-statsd` → `MetricsStatsd` are
 intentional lower-case-word namespaces, and `testing-application` shares `EzPhp\Testing\`
 with `testing`).
@@ -170,17 +172,21 @@ stub is written only if the submodule doesn't already ship one, so
 `composer guidelines:sync` has a `# Package:` heading to anchor part 1 against.
 
 It writes `modules/<name>/` and registers the module in the four places the monorepo
-needs it — root `composer.json` (`autoload.psr-4`), `phpstan.neon`, `phpunit.xml`
-(test suite **and** coverage source), and `packages.sh` (alphabetical position).
+needs it — root `composer.json` (`autoload.psr-4` **and** the shared
+`autoload-dev` `Tests\` directory list), `phpstan.neon`, `phpunit.xml` (test suite
+**and** coverage source), and `packages.sh` (alphabetical position) — in both
+generated and `--repo` mode.
 
 Two things stay manual on purpose:
 
 - **`CLAUDE.md` part 1** — only the `# Package:` section is generated. Run
   `composer guidelines:sync` afterwards; baking a guidelines copy into the generator
   would recreate the drift the sync script exists to prevent.
-- **The host-port table below** (`--services` only) — editing it marks every
-  `CLAUDE.md` copy as drifted at once, so the next `composer full` would fail for
-  a brand-new module. The generator prints which ports to claim instead.
+- **The host-port table below** (`--services` only) — claim the "next free" row by
+  editing the table in `CODING_GUIDELINES.md` (never in a `CLAUDE.md` copy) and run
+  `composer guidelines:sync` in the same change. Editing it drifts every `CLAUDE.md`
+  until the sync runs, which is why the generator only reminds you instead of doing
+  it. Skipping the edit leaves "next free" stale, so the next module collides.
 
 ### 4 — Docker scaffold
 
@@ -377,6 +383,7 @@ Event::listen(OrderPlaced::class, new SendOrderConfirmation());
 
 ## Design Decisions and Constraints
 
+- **`Event` façade creates a default dispatcher when none is set** — `Event::getDispatcher()` lazily builds a plain `new EventDispatcher()` so `Event::listen()` / `Event::dispatch()` work in scripts and tests without `EventServiceProvider`. Listeners registered through the façade and events dispatched through it share that same instance, so nothing is dropped; what the fallback lacks is only the provider's `events.listeners` config wiring. Mirrors the `Http` façade's documented default client — the other façades require their provider because they need configuration.
 - **Synchronous by default** — All listeners execute in the same PHP process before `dispatch()` returns. Async dispatch is opt-in via `dispatch($event, async: true)` and requires a `QueueInterface` to be configured on the dispatcher.
 - **Propagation control via `StoppableEventInterface` or Closure return value** — Events that implement `StoppableEventInterface` can call `stopPropagation()` from within a listener. Closures can stop propagation by returning `false`. Class-based `ListenerInterface` listeners cannot stop propagation — they must either modify event state (for stoppable events) or use a different pattern.
 - **Listeners accumulate on repeated `listen()` calls** — There is no deduplication. Registering the same listener twice means it fires twice. This is intentional; deduplication is the caller's responsibility.
