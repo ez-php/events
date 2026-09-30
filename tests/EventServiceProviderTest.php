@@ -167,6 +167,37 @@ final class EventServiceProviderTest extends ApplicationTestCase
         $this->assertTrue($listener->called);
     }
 
+    /**
+     * A listener registered on the façade before EventServiceProvider boots
+     * (or in code that runs without it) must stay on the dispatcher the
+     * container hands out — the provider adopts the façade's dispatcher.
+     *
+     * @return void
+     * @throws \ReflectionException
+     */
+    public function test_listener_registered_before_boot_survives_and_is_shared_with_container(): void
+    {
+        Event::resetDispatcher();
+
+        $event = new class () implements EventInterface {
+        };
+        $calls = 0;
+        Event::listen($event::class, function () use (&$calls): void {
+            $calls++;
+        });
+        $early = Event::getDispatcher();
+
+        $app = $this->makeAppWithEventsConfig([]);
+
+        self::assertSame($early, $app->make(EventDispatcher::class));
+        self::assertSame($early, Event::getDispatcher());
+
+        $app->make(EventDispatcher::class)->dispatch($event);
+        self::assertSame(1, $calls);
+
+        Event::resetDispatcher();
+    }
+
     // ─── Config-based listener registration ──────────────────────────────────
 
     /**

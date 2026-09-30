@@ -40,11 +40,11 @@ final class EventServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Adopt the façade's dispatcher instead of replacing it: listeners that were
+        // registered through Event:: before this provider booted (or by code that
+        // ran first) must stay on the instance the container hands out.
         $this->app->bind(EventDispatcher::class, function (ContainerInterface $app): EventDispatcher {
-            $dispatcher = new EventDispatcher();
-            Event::setDispatcher($dispatcher);
-
-            return $dispatcher;
+            return Event::getDispatcher();
         });
     }
 

@@ -28,10 +28,11 @@ docker compose exec app composer full
 Executes in order:
 1. `sync_guidelines.php --check` — fails if any `CLAUDE.md` has drifted from this file
 2. `check_test_classes.php` — fails on a duplicate test class name (all packages share the `Tests\` namespace, so a collision is a fatal error in the aggregated run, not a test failure)
-3. `phpstan analyse` — static analysis, level 9, config: `phpstan.neon`
-4. `php-cs-fixer fix` — auto-fixes style (`@PSR12` + `@PHP83Migration` + strict rules)
+3. `check_module_deps.php` — fails when a package's code imports an ez-php package its `composer.json` does not declare (module `src`: `require`/`suggest`; tests: `require`/`require-dev` and their dependencies), or requires one it never uses
+4. `phpstan analyse` — static analysis, level 9, config: `phpstan.neon`
+5. `php-cs-fixer fix` — auto-fixes style (`@PSR12` + `@PHP83Migration` + strict rules)
    *(Note: `@PHP85Migration` does not exist yet in php-cs-fixer; `@PHP83Migration` is the highest available and is used intentionally even though the project targets PHP 8.5)*
-5. `phpunit` — all tests with coverage
+6. `phpunit` — all tests with coverage
 
 Individual commands when needed:
 ```
@@ -40,6 +41,7 @@ composer cs                  # CS Fixer only
 composer test                # PHPUnit only
 composer guidelines:check    # CLAUDE.md drift only
 composer test-classes:check  # duplicate test class names only
+composer module-deps:check   # undeclared / unused ez-php package dependencies only
 ```
 
 **PHPStan:** never suppress with `@phpstan-ignore-line` — always fix the root cause.
@@ -198,20 +200,22 @@ vendor/bin/docker-init
 
 This copies `Dockerfile`, `docker-compose.yml`, `.env.example`, `start.sh`, and `docker/` into the module, replacing `{{MODULE_NAME}}` placeholders. Existing files are never overwritten.
 
-Pass `--services` to merge MySQL/Redis/Meilisearch service definitions directly into `docker-compose.yml` and uncomment the matching sections in `.env.example`, instead of adapting them by hand afterward:
+Pass `--services` to merge MySQL/Redis/Meilisearch/Memcached/Mailpit service definitions directly into `docker-compose.yml` and uncomment the matching sections in `.env.example`, instead of adapting them by hand afterward:
 
 ```
 vendor/bin/docker-init --services=mysql
 vendor/bin/docker-init --services=redis
 vendor/bin/docker-init --services=meilisearch
 vendor/bin/docker-init --services=mysql,redis
+vendor/bin/docker-init --services=memcached,mailpit
 ```
 
-Pass `--extensions` to merge PHP extension install blocks (apt packages plus `docker-php-ext-install`/`pecl` lines) directly into `docker/app/Dockerfile`, instead of hand-editing it afterward — supported extensions: `bcmath`, `gmp`, `gd`, `imagick`:
+Pass `--extensions` to merge PHP extension install blocks (apt packages plus `docker-php-ext-install`/`pecl` lines) directly into `docker/app/Dockerfile`, instead of hand-editing it afterward — supported extensions: `bcmath`, `gmp`, `gd`, `imagick`, `memcached`, `apcu` (with `apc.enable_cli=1`):
 
 ```
 vendor/bin/docker-init --extensions=gmp,bcmath
 vendor/bin/docker-init --extensions=gd,imagick
+vendor/bin/docker-init --extensions=memcached,apcu
 ```
 
 When run from a module directory inside this monorepo, any requested extension not already present is also merged into the shared root `docker/app/Dockerfile` — the container `composer full` at the root actually runs against, distinct from the module's own standalone image.
@@ -361,7 +365,7 @@ Static façade. Delegates all calls to the managed `EventDispatcher` singleton.
 
 ### EventServiceProvider (`src/EventServiceProvider.php`)
 
-- **`register()`** — Binds `EventDispatcher::class` as a factory; calls `Event::setDispatcher()` when resolved.
+- **`register()`** — Binds `EventDispatcher::class` to `Event::getDispatcher()`: the container adopts the façade's dispatcher (creating it if none exists yet) instead of replacing it, so listeners registered through `Event::` before the provider booted stay on the shared instance.
 - **`boot()`** — Eagerly resolves `EventDispatcher` (wiring the static façade), then reads `config/events.php` and registers all declared listeners via the container. Non-existent class names and entries that don't implement `ListenerInterface` are silently skipped.
 
 Config format (`config/events.php`):
@@ -387,11 +391,11 @@ Event::listen(OrderPlaced::class, new SendOrderConfirmation());
 
 ## Design Decisions and Constraints
 
-- **`Event` façade creates a default dispatcher when none is set** — `Event::getDispatcher()` lazily builds a plain `new EventDispatcher()` so `Event::listen()` / `Event::dispatch()` work in scripts and tests without `EventServiceProvider`. Listeners registered through the façade and events dispatched through it share that same instance, so nothing is dropped; what the fallback lacks is only the provider's `events.listeners` config wiring. Mirrors the `Http` façade's documented default client and `Ai`'s `NullDriver` fallback (see `ez-php/ai`'s `CLAUDE.md`); most other façades (`Mail`, `Broadcast`, `Notification`, `Storage`, `Flag`, …) require their provider because they need configuration.
+- **`Event` façade creates a default dispatcher when none is set** — `Event::getDispatcher()` lazily builds a plain `new EventDispatcher()` so `Event::listen()` / `Event::dispatch()` work in scripts and tests without `EventServiceProvider`. Listeners registered through the façade and events dispatched through it share that same instance, so nothing is dropped; what the fallback lacks is only the provider's `events.listeners` config wiring. Mirrors the `Http` façade's documented default client; most other façades (`Mail`, `Broadcast`, `Notification`, `Storage`, `Flag`, `Ai`, …) require their provider because they need configuration.
 - **Synchronous by default** — All listeners execute in the same PHP process before `dispatch()` returns. Async dispatch is opt-in via `dispatch($event, async: true)` and requires a `QueueInterface` to be configured on the dispatcher.
 - **Propagation control via `StoppableEventInterface` or Closure return value** — Events that implement `StoppableEventInterface` can call `stopPropagation()` from within a listener. Closures can stop propagation by returning `false`. Class-based `ListenerInterface` listeners cannot stop propagation — they must either modify event state (for stoppable events) or use a different pattern.
 - **Listeners accumulate on repeated `listen()` calls** — There is no deduplication. Registering the same listener twice means it fires twice. This is intentional; deduplication is the caller's responsibility.
-- **`EventServiceProvider` resolves eagerly in `boot()`** — This is a deliberate exception to lazy resolution. The static façade must be wired before other providers' `boot()` methods run, otherwise `Event::listen()` calls in those providers would silently create a throwaway dispatcher that gets replaced when the container later resolves `EventDispatcher::class`.
+- **`EventServiceProvider` resolves eagerly in `boot()`** — This is a deliberate exception to lazy resolution. The static façade must be wired before other providers' `boot()` methods run, so the container, the façade and every provider's `Event::listen()` agree on one instance from the start. Since `register()` adopts the façade's dispatcher, a listener registered before this provider (or with the façade used on its own first) is no longer lost: it used to land on a throwaway dispatcher that the provider replaced.
 - **`EventInterface` is a marker** — It carries no methods. Payload is carried by concrete event class properties (preferably `public readonly`). A heavier base class would force all events to extend it, breaking composition.
 - **Closures are first-class listeners** — Accepting `Closure` alongside `ListenerInterface` avoids boilerplate for simple one-off listeners in tests or small applications.
 
