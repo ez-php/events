@@ -416,8 +416,8 @@ Event::listen(OrderPlaced::class, new SendOrderConfirmation());
 
 | Concern | Where it belongs |
 |---|---|
-| Async / queued event dispatch | `ez-php/queue` |
-| Event sourcing / event store | Separate dedicated package |
+| Queue drivers and the worker that runs queued events | `ez-php/queue` — this module only ships `AsyncEventJob` and `dispatch(..., async: true)` against a `QueueInterface` |
+| Event sourcing / event store | `ez-php/event-store` |
 | Application event classes (e.g. `UserCreated`) | Application code |
 | Listener wiring for the application | `config/events.php` or an application-level service provider |
 | Broadcast / WebSocket events | Infrastructure layer |
