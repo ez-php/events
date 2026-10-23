@@ -283,6 +283,7 @@ src/
 
 tests/
 ├── TestCase.php                    — Base PHPUnit test case
+├── AsyncEventJobTest.php  — Covers AsyncEventJob
 ├── EventTest.php                   — Covers Event façade: listen, dispatch, forget, instance management
 ├── EventDispatcherTest.php         — Covers EventDispatcher: listen, dispatch, forget, getListeners, closure listeners, priority, wildcard, propagation
 └── EventServiceProviderTest.php    — Covers provider registration and eager resolution
