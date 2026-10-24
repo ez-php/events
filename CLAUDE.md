@@ -283,6 +283,8 @@ src/
 
 tests/
 ├── TestCase.php                    — Base PHPUnit test case
+├── ApplicationTestCase.php         — base class for tests that need a bootstrapped Application
+├── Events/                         — event fixtures: OrderPlaced.php, OrderShipped.php, UserCreated.php
 ├── AsyncEventJobTest.php  — Covers AsyncEventJob
 ├── EventTest.php                   — Covers Event façade: listen, dispatch, forget, instance management
 ├── EventDispatcherTest.php         — Covers EventDispatcher: listen, dispatch, forget, getListeners, closure listeners, priority, wildcard, propagation
